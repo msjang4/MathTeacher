@@ -75,10 +75,15 @@ def getlen(string, parsed_list, row, begin,end):
     noparam = [i[2] for i in parsed_list[row]]
     times = [i[3] for i in parsed_list[row]]
     loopback_len = len(loopback)
+    lastlength = None
     beforeback = None
+    prev_flag  =False
+    next_flag = False
+    prev_idx = None
+    prev_idx_len = None
     cnt = [0 for i in range(loopback_len)]
     if getidx(string,[parsed[0]],begin,end)[0] is None:
-        raise MyException("'"+parsed[0]+"' Must Be First Of String")
+        raise MyException("'"+str(parsed[0])+"' Must Be First Of String")
     i= 0
     col = 0
     prev = -1
@@ -90,10 +95,32 @@ def getlen(string, parsed_list, row, begin,end):
         str_list = [parsed_list[i][0][0]  for i in range(len(parsed_list))]
         str_list.insert(row,parsed[col])
         str_list = str_list[prev+1:]
-        idx,idx_len = getidx(string[i:],str_list,begin,end)
+        if next_flag:
+            idx = prev_idx - (prev+1)
+            idx_len = prev_idx_len
+        elif prev_flag:
+            idx,idx_len = (None,None)
+        else:
+            idx,idx_len = getidx(string[i:],str_list,begin,end)
+        #디버깅 쵝오
+        #print(string[i:],str_list,(str_list[idx], idx)  if idx is not None else None, row,col)
+        
+        if (idx is None or idx+(prev+1) != row) and loopback[col] == col and (not isinstance(noparam[col],list) or not col in noparam[col][1]) and noparam[col] and getbool(times[col],cnt[col],begin,end):
+            #반복할 문자열의 횟수가 달성됐고, 이제 그 반복할 문자열이 안 나왔다면 들어오는 If문
+            if next_flag:
+                print("Something Wrong")
+            waslooped = False
+            col+=1
+            if col == len(parsed):
+                if flag_1:
+                    lendict[string][row] = i
+                elif flag_2:
+                    lendict[string] = {row: i}
+                return i
+            continue
         if idx is not None:
             if idx == row-(prev+1):
-                if not isinstance(noparam[col], list) and loopback[col] == col: 
+                if (not isinstance(noparam[col], list) or not col in noparam[col][1]) and loopback[col] == col : 
                     repeat_flag = True
                 else:
                     repeat_flag = False
@@ -110,11 +137,17 @@ def getlen(string, parsed_list, row, begin,end):
                 if hasparam or (col != 0 and cnt[col-1] == 0 and loopback[col-1] == col-1 and not isinstance(noparam[col-1],list) and noparam[col-1] == False):
                     pass
                 elif string[start:i] != '':
+                    if loopback[col] is not None and getbool(times[col],cnt[col],begin,end) and col+1 == len(parsed):
+                        if flag_1:
+                            lendict[string][row] = start
+                        elif flag_2:
+                            lendict[string] = {row: start}
+                        return start
                     if flag_1:
-                        lendict[string][row] = None
+                        lendict[string][row] = lastlength
                     elif flag_2:
-                        lendict[string] = {row: None}
-                    return None
+                        lendict[string] = {row: lastlength}
+                    return lastlength
                 if isinstance(str_list[idx],list):
                     start=i
                     i+= idx_len
@@ -125,7 +158,7 @@ def getlen(string, parsed_list, row, begin,end):
                         idx_len -= len(string[start:i]) - len(' ')
                 else:
                     i+= idx_len
-                start=i
+                start = i
                 if loopback[col] is None:
                     col+=1
                     if col == len(parsed):
@@ -136,7 +169,9 @@ def getlen(string, parsed_list, row, begin,end):
                         return i
                     waslooped = False
                 else:
-                    cnt[col] += 1
+                    cnt[col]+=1
+                    if getbool(times[col],cnt[col],begin,end) and col+1 == len(parsed):
+                        lastlength = start
                     beforeback = col
                     if times[col][1] == cnt[col]: # <1*1~2>에서 111을 11과 1로 끊어보기 위함
                         col+=1
@@ -149,9 +184,20 @@ def getlen(string, parsed_list, row, begin,end):
                     else:
                         col = loopback[col]
                         waslooped = True
+                # start=i
             else:
-                
                 idx = idx+(prev+1)
+                if next_flag:
+                    next_flag = False
+                elif idx > row : 
+                    #우선순위가 더 높은 parsed[col:]을 처리해야한다.
+                    prev_flag=True
+                    prev_idx = idx
+                    prev_idx_len = idx_len
+                    continue
+
+
+
                 ciridx = idx - 1 if idx > row else idx #circulated idx
                 length = getlen(string[i:],parsed_list,ciridx,begin,end)
                 if length is not None:
@@ -163,15 +209,22 @@ def getlen(string, parsed_list, row, begin,end):
                         prev = -1
                         i+=1
         else:
-            idx,idx_len = getidx(string[i:],parsed,begin,end)
+            #idx,idx_len = getidx(string[i:],parsed[col:],begin,end)
+            idx,idx_len = getidx(string[i:],parsed[col:],begin,end)
+            if idx is not None:
+                idx+=col
             if idx is not None and col != idx:
                 # == 중요 ==
-                if col > idx:
-                    if flag_1:
-                        lendict[string][row] = None
-                    elif flag_2:
-                        lendict[string] = {row: None}
-                    return None
+                # if col > idx: 
+                #     if prev_flag:
+                #         prev_flag= False 
+                #         next_flag= True
+                #         continue   
+                #     elif flag_1:
+                #         lendict[string][row] = None
+                #     elif flag_2:
+                #         lendict[string] = {row: None}
+                #     return None
                 if all(map(lambda x: getbool(x[0],x[1],begin,end),[[times[ii],cnt[ii]] for ii in range(col,idx+1)] )):
                     for ii in range(col,idx): #cnt[idx]는 초기화 안한다
                         cnt[ii] = 0
@@ -182,9 +235,18 @@ def getlen(string, parsed_list, row, begin,end):
                         cnt[ii] = 0
                     col = idx
                     waslooped= False
+                elif prev_flag:
+                    prev_flag= False
+                    next_flag=True
+                    continue
                 else:
                     i+=1
                     prev = -1
+                prev_flag= False
+            elif prev_flag:
+                prev_flag=False
+                next_flag = True
+                continue
             else:
                 idx,idx_len = getidx(string[i:], [begin,end,'\\'+begin,'\\'+end,'\\\\','\\'],begin,end)
                 prev = -1
@@ -199,7 +261,7 @@ def getlen(string, parsed_list, row, begin,end):
                 else: # [2,5) -> 2,3,4
                     i+= len([begin,end,'\\'+begin,'\\'+end,'\\\\','\\'][idx])
     if loopback[col] is not None and getbool(times[col],cnt[col],begin,end) and col+1 == len(parsed):
-        if not isinstance(noparam[col], list) and loopback[col] == col: 
+        if (not isinstance(noparam[col], list) or not col in noparam[col][1]) and loopback[col] == col : 
             repeat_flag = True
         else:
             repeat_flag = False
@@ -214,6 +276,12 @@ def getlen(string, parsed_list, row, begin,end):
             else:
                 hasparam = False if noparam[col] else True
         if hasparam is False:
+            if lastlength is not None:
+                if flag_1:
+                    lendict[string][row] = lastlength
+                elif flag_2:
+                    lendict[string] = {row: lastlength}
+                return lastlength
             if flag_1:
                 lendict[string][row] = start
             elif flag_2:
@@ -225,10 +293,10 @@ def getlen(string, parsed_list, row, begin,end):
             lendict[string] = {row: str_len}
         return str_len
     if flag_1:
-        lendict[string][row] = None
+        lendict[string][row] = lastlength
     elif flag_2:
-        lendict[string] = {row: None}
-    return None
+        lendict[string] = {row: lastlength}
+    return lastlength
 def repairparam(param_list, loopback, startidx, firstback, lastinsertidx, col):
     ii = startidx[col]
     if ii is None:
@@ -255,6 +323,10 @@ def getparam_list(string, parsed_list,row, begin,end):
     beforeback = None
     wasjumped = False
     lastlength = None
+    prev_flag = False
+    next_flag = False
+    prev_idx = None
+    prev_idx_len = None
     jumprange = range(0)
     param_list = []
     start=0
@@ -268,12 +340,18 @@ def getparam_list(string, parsed_list,row, begin,end):
         str_list = [parsed_list[i][0][0]  for i in range(len(parsed_list))]
         str_list.insert(row,parsed[col])
         str_list = str_list[prev+1:]
-        idx,idx_len = getidx(string[i:],str_list)
+        if next_flag:
+            idx = prev_idx - (prev+1)
+            idx_len = prev_idx_len
+        elif prev_flag:
+            idx, idx_len = (None,None)
+        else:
+            idx,idx_len = getidx(string[i:],str_list)
         #== 디버깅 쵝오 
-       # print(string[i:],param_list,str_list[idx] if idx is not None else idx, None if idx is None else idx+prev+1, row,col)
-        if idx is None and loopback[col] == col and (not isinstance(noparam[col],list) or not col in noparam[col][1]) and noparam[col] and getbool(times[col],cnt[col],begin,end):
+        #print(string[i:],param_list,str_list[idx] if idx is not None else idx, None if idx is None else idx+prev+1, row,col)
+        #print(string[i:],param_list,str_list, None if idx is None else idx+prev+1, row,col)
+        if (idx is None or idx+(prev+1) != row) and loopback[col] == col and (not isinstance(noparam[col],list) or not col in noparam[col][1]) and noparam[col] and getbool(times[col],cnt[col],begin,end):
             #반복할 문자열의 횟수가 달성됐고, 이제 그 반복할 문자열이 안 나왔다면 들어오는 If문
-            
             waslooped = False
             if insertidx[col] is None:
                 lastinsertidx = insertidx[col] =  len(param_list)
@@ -300,8 +378,6 @@ def getparam_list(string, parsed_list,row, begin,end):
                         hasparam = False if noparam[col] else True
                 if insertidx[col] is None:
                     lastinsertidx = insertidx[col] =  len(param_list)
-#                    lastinsertidx = insertidx[col] =  len(param_list) +1 if hasparam and repeat_flag else len(param_list)
-                 
                 
                 if hasparam or (col != 0 and cnt[col-1] == 0 and loopback[col-1] == col-1 and not isinstance(noparam[col-1],list) and noparam[col-1] == False):
                     #궁극의 예외처리...  [[' +', ' -'], 2, [False, {2: False}], [0, 1]], [' } (', None, True, None]에서
@@ -310,6 +386,9 @@ def getparam_list(string, parsed_list,row, begin,end):
                     param_list.append(string[start:i])
                 elif string[start:i] != '':
                     if loopback[col] is not None and getbool(times[col],cnt[col],begin,end) and col+1 == len(parsed):
+                        if startidx[col] is None:
+                            startidx[col] = insertidx[loopback[col]]
+                        param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx,col)
                         return (param_list,start)
                     return lastlength
                         
@@ -333,21 +412,22 @@ def getparam_list(string, parsed_list,row, begin,end):
                             param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx,ii)
 
                 i += idx_len
-                start=i
+                start = i
 
-                
                 if loopback[col] is None:
                     col+=1
                     if col == len(parsed):
                         return (param_list,i) 
                     waslooped = False
-                else:
-                    cnt[col] += 1
+                else: 
                     beforeback = col
                     if startidx[col] is None:
                         startidx[col] = insertidx[loopback[col]]
                     if not repeat_flag or isinstance(parsed[col],list)  :
                         param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx,col)
+                    cnt[col]+=1
+                    if getbool(times[col],cnt[col],begin,end) and col + 1 == len(parsed):
+                        lastlength = (param_list,start)
                     firstback[col] = False
                     if times[col][1] == cnt[col]:  # <1*1~2>에서 111을 11과 1로 끊어보기 위함
                         col+=1
@@ -356,6 +436,9 @@ def getparam_list(string, parsed_list,row, begin,end):
                     else:
                         col = loopback[col]
                         waslooped = True
+
+                # start=i
+
                 if wasjumped:
                     for ii in jumprange:
                         insertidx[loopback[ii]] = None
@@ -364,23 +447,33 @@ def getparam_list(string, parsed_list,row, begin,end):
                 wasjumped = False
             else:
                 idx = idx+(prev+1)
+                if next_flag:
+                    next_flag=False
+                elif idx > row :
+                    prev_flag=True
+                    prev_idx = idx
+                    prev_idx_len = idx_len
+                    continue
                 ciridx = idx - 1 if idx > row else idx #circulated idx
                 length = getlen(string[i:],parsed_list,ciridx,begin,end)
                 if length is not None:
                     i+= length
+                    if i == length and idx < row:
+                        lastlength = i
                     prev = -1
                 else:
                     prev = idx
                     if prev+1 == len(parsed_list)+1:
-                        prev = -1
                         i+=1
+                        prev = -1
         else:
             idx ,idx_len= getidx(string[i:],parsed[col:])
             if idx is not None:
                 idx+=col
             if idx is not None and col != idx:
-                if col > idx:
-                    return lastlength
+                #불가능한 경우
+                # if col > idx:
+                #     return lastlength
                 if all(map(lambda x: getbool(x[0],x[1],begin,end),[[times[ii],cnt[ii]] for ii in range(col,idx+1)] )):
                     for ii in range(col,idx): #cnt[idx]는 초기화 안한다
                         cnt[ii] = 0
@@ -395,9 +488,19 @@ def getparam_list(string, parsed_list,row, begin,end):
                     wasjumped = True
                     waslooped = False
                     col = idx
+                elif prev_flag:
+                    prev_flag=False
+                    next_flag = True
+                    continue
+                    
                 else:
                     prev = -1
                     i+=1
+                prev_flag = False
+            elif prev_flag:
+                prev_flag=False
+                next_flag = True
+                continue
             else:
                 prev = -1
                 idx,idx_len = getidx(string[i:], [begin,end,'\\'+begin,'\\'+end,'\\\\','\\'])
@@ -427,6 +530,10 @@ def getparam_list(string, parsed_list,row, begin,end):
             else:
                 hasparam = False if noparam[col] else True
         if hasparam is False:
+            if lastlength is not None:
+                return lastlength
+            if not repeat_flag or isinstance(parsed[col],list):
+                param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx,col)
             return (param_list,start)
         if string[start:] != '':
             if insertidx[col] is None:
@@ -435,7 +542,7 @@ def getparam_list(string, parsed_list,row, begin,end):
         if startidx[col] is None:
             startidx[col] = insertidx[loopback[col]]
         if not repeat_flag or isinstance(parsed[col],list):
-            param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx+1,col)
+            param_list = repairparam(param_list,loopback,startidx,firstback,lastinsertidx,col)
         return (param_list,i)
     return lastlength
 
@@ -791,6 +898,29 @@ def parse(string,param,parsed,wasparam, begin, end):
                                 parsed[-1][1] = loopback
                                 parsed[-1][3]  = times
 
+
+                                #시작 - 구분 - 시작이 부적합한지 검사
+                                usual = loopback #평소
+                                #print(parsed,wasparam,usual,loopback)
+                                byloop = len(parsed) #loopback에 의해 돌아왔을 때   
+                                parsed, wasparam = parse(start_str,param,parsed, False if wasparam is None else wasparam,begin,end)
+                                
+                                #==디버깅 == 
+                                #print(parsed,wasparam,usual,loopback)
+                                # sliceflag = False
+                                # if len(parsed) <= byloop:
+                                #     byloop = usual
+                                # else:
+                                #     sliceflag = True
+                                byloop -= 1
+                                
+                                if len(parsed) != byloop+2: #자기 자신 루프인 경우는 제외하겠다는 것!
+                                    if isinstance(parsed[usual][2],list):
+                                        parsed[usual][2][1][byloop] = parsed[byloop][2]
+                                    else:
+                                        parsed[usual][2] = [parsed[usual][2], {byloop: parsed[byloop][2]}]
+                                parsed=parsed[:byloop+1]
+
                             elif escaped_str == '':
                                 if j==1:
                                     raise MyException("Empty('') Cant Be In Splited")
@@ -885,13 +1015,13 @@ def latex2img(latex,x=0.001, y=0.001,size=30,imgsize=None,filename='output.png')
 def convertall(string,parsed_list,form_list,eval_list,begin,end):
     parsed_list_len = len(parsed_list)
     for row in range(parsed_list_len):
-        string = convert(string,parsed_list,form_list,eval_list,begin,end,row)
+        string = convert(string,parsed_list,form_list,eval_list,begin,end,row,True)
         #==디버깅 쵝오
-        #print(row,": ",repr(string))
+        print(row,": ",repr(string))
     lendict = {} #lendict 초기화
     return string
 
-def convert(string,parsed_list,form_list,eval_list,begin,end,row):
+def convert(string,parsed_list,form_list,eval_list,begin,end,row,first=False):
     doeval = eval_list[row]
     str_len = len(string)
     if isinstance(string, list):
@@ -902,6 +1032,8 @@ def convert(string,parsed_list,form_list,eval_list,begin,end,row):
     i=0
     while i< str_len:
         param_list = getparam_list(string[i:],parsed_list,row,begin,end)
+        #디버깅 쵝오
+        #print(string[i:],"param_list: ",param_list)
         if param_list is not None:
             if isinstance(param_list,int):
                 i+=param_list
@@ -910,11 +1042,14 @@ def convert(string,parsed_list,form_list,eval_list,begin,end,row):
                 param_list = param_list[0]
                 if len(param_list) ==1 and isinstance(param_list,list) and len(param_list[0]) ==1 and param_list[0][0] == string:
                     #=무한 재귀 방지
+                    if first:
+                        #재귀 호출이 아닌 경우에는 form형태로 변환해서 반환한다.
+                        if doeval:
+                            return eval(form_list[row].format(*param_list))            
+                        else:
+                            return form_list[row].format(*param_list)
                     return string
-                    # if doeval:
-                    #     return eval(form_list[row].format(*param_list))            
-                    # else:
-                    #     return form_list[row].format(*param_list)
+                    
                 param_list = convert(param_list,parsed_list,form_list,eval_list,begin,end,row)
                 if doeval:
                     return string[:i] + eval(form_list[row].format(*param_list)) + convert(string[i+length:],parsed_list,form_list,eval_list,begin,end,row)
@@ -926,8 +1061,8 @@ def convert(string,parsed_list,form_list,eval_list,begin,end,row):
     return string
 
 def wannaconvert(wanna,symbs):
-    symbs = symbs + [relationals]+[argleft]+[argright]
-    str_list = ['Complex','Matrix','Function','Relational','Argleft','ArgRight','All']
+    symbs = symbs +[reduce(operator.add,symbs)]+ [relationals]+[argleft]+[argright]
+    str_list = ['Complex','Matrix','Function','Unknown','Relational','Argleft','ArgRight']
     for i in range(len(str_list)):
         wanna =wanna.replace('{'+str_list[i]+'}','|'.join(symbs[i]))
     return wanna
